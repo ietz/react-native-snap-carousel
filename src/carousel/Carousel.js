@@ -119,7 +119,6 @@ export default class Carousel extends Component {
         this._previousItemsLength = initialActiveItem;
 
         this._mounted = false;
-        this._positions = [];
         this._currentContentOffset = 0; // store ScrollView's scroll position
         this._canFireBeforeCallback = false;
         this._canFireCallback = false;
@@ -127,8 +126,10 @@ export default class Carousel extends Component {
         this._onScrollTriggered = true; // used when momentum is enabled to prevent an issue with edges items
         this._lastScrollDate = 0; // used to work around a FlatList bug
         this._scrollEnabled = props.scrollEnabled === false ? false : true;
+        this._initPositions(props);
 
-        this._initPositionsAndInterpolators = this._initPositionsAndInterpolators.bind(this);
+        this._initPositions = this._initPositions.bind(this);
+        this._initInterpolators = this._initInterpolators.bind(this);
         this._renderItem = this._renderItem.bind(this);
         this._onSnap = this._onSnap.bind(this);
 
@@ -142,6 +143,7 @@ export default class Carousel extends Component {
         this._onTouchRelease = this._onTouchRelease.bind(this);
 
         this._getKeyExtractor = this._getKeyExtractor.bind(this);
+        this._getItemLayout = this._getItemLayout.bind(this);
 
         // Native driver for scroll events
         const scrollEventConfig = {
@@ -194,7 +196,7 @@ export default class Carousel extends Component {
         };
 
         this._mounted = true;
-        this._initPositionsAndInterpolators();
+        this._initInterpolators();
 
         // Without 'requestAnimationFrame' or a `0` timeout, images will randomly not be rendered on Android...
         requestAnimationFrame(() => {
@@ -256,7 +258,8 @@ export default class Carousel extends Component {
             this._activeItem = nextActiveItem;
             this._previousItemsLength = itemsLength;
 
-            this._initPositionsAndInterpolators(nextProps);
+            this._initPositions(nextProps);
+            this._initInterpolators(nextProps);
 
             // Handle scroll issue when dynamically removing items (see #133)
             // This also fixes first item's active state on Android
@@ -487,6 +490,15 @@ export default class Carousel extends Component {
         return this._needsScrollView() ? `scrollview-item-${index}` : `flatlist-item-${index}`;
     }
 
+    _getItemLayout (data, index) {
+        const itemPosition = this._positions[index];
+        return {
+            offset: itemPosition.start,
+            length: itemPosition.end - itemPosition.start,
+            index
+        }
+    }
+
     _getScrollOffset (event) {
         const { vertical } = this.props;
         return (event && event.nativeEvent && event.nativeEvent.contentOffset &&
@@ -545,25 +557,28 @@ export default class Carousel extends Component {
         return 0;
     }
 
-    _initPositionsAndInterpolators (props = this.props) {
-        const { data, itemWidth, itemHeight, scrollInterpolator, vertical } = props;
+    _initPositions (props = this.props) {
+        const { itemWidth, itemHeight, vertical } = props;
         const sizeRef = vertical ? itemHeight : itemWidth;
+
+        this._positions = this._getCustomData(props).map((_, index) => ({
+            start: index * sizeRef,
+            end: index * sizeRef + sizeRef
+        }));
+    }
+
+    _initInterpolators (props = this.props) {
+        const { data, scrollInterpolator } = props;
 
         if (!data.length) {
             return;
         }
 
         let interpolators = [];
-        this._positions = [];
 
         this._getCustomData(props).forEach((itemData, index) => {
             const _index = this._getCustomIndex(index, props);
             let animatedValue;
-
-            this._positions[index] = {
-                start: index * sizeRef,
-                end: index * sizeRef + sizeRef
-            };
 
             if (!this._shouldAnimateSlides(props)) {
                 animatedValue = new Animated.Value(1);
@@ -909,7 +924,7 @@ export default class Carousel extends Component {
 
         // Prevent unneeded actions during the first 'onLayout' (triggered on init)
         if (this._onLayoutInitDone) {
-            this._initPositionsAndInterpolators();
+            this._initInterpolators();
             this._snapToItem(this._activeItem, false, false, false, false);
         } else {
             this._onLayoutInitDone = true;
@@ -1261,7 +1276,7 @@ export default class Carousel extends Component {
             // extraData: this.state,
             renderItem: this._renderItem,
             numColumns: 1,
-            getItemLayout: undefined, // see #193
+            getItemLayout: this._getItemLayout,
             initialScrollIndex: undefined, // see #193
             keyExtractor: keyExtractor || this._getKeyExtractor
         } : {};

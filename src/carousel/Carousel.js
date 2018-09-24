@@ -56,6 +56,7 @@ export default class Carousel extends Component {
         layoutCardOffset: PropTypes.number,
         lockScrollTimeoutDuration: PropTypes.number,
         lockScrollWhileSnapping: PropTypes.bool,
+        contentRecenterDelay: PropTypes.number,
         loop: PropTypes.bool,
         loopClonesPerSide: PropTypes.number,
         scrollEnabled: PropTypes.bool,
@@ -67,7 +68,7 @@ export default class Carousel extends Component {
         useScrollView: PropTypes.bool,
         vertical: PropTypes.bool,
         onBeforeSnapToItem: PropTypes.func,
-        onSnapToItem: PropTypes.func
+        onSnapToItem: PropTypes.func,
     };
 
     static defaultProps = {
@@ -92,6 +93,7 @@ export default class Carousel extends Component {
         layout: 'default',
         lockScrollTimeoutDuration: 1000,
         lockScrollWhileSnapping: false,
+        contentRecenterDelay: 0,
         loop: false,
         loopClonesPerSide: 3,
         scrollEnabled: true,
@@ -99,7 +101,7 @@ export default class Carousel extends Component {
         shouldOptimizeUpdates: true,
         swipeThreshold: 20,
         useScrollView: !AnimatedFlatList,
-        vertical: false
+        vertical: false,
     }
 
     constructor (props) {
@@ -267,10 +269,6 @@ export default class Carousel extends Component {
             if (this._previousItemsLength > itemsLength) {
                 this._hackActiveSlideAnimation(nextActiveItem, null, true);
             }
-
-            if (hasNewSliderWidth || hasNewSliderHeight || hasNewItemWidth || hasNewItemHeight) {
-                this._snapToItem(nextActiveItem, false, false, false, false);
-            }
         } else if (nextFirstItem !== this._previousFirstItem && nextFirstItem !== this._activeItem) {
             this._activeItem = nextFirstItem;
             this._previousFirstItem = nextFirstItem;
@@ -278,9 +276,25 @@ export default class Carousel extends Component {
         }
     }
 
+    componentDidUpdate (prevProps) {
+        const { itemHeight, itemWidth, sliderHeight, sliderWidth } = prevProps;
+
+        const hasNewSliderWidth = sliderWidth && sliderWidth !== this.props.sliderWidth;
+        const hasNewSliderHeight = sliderHeight && sliderHeight !== this.props.sliderHeight;
+        const hasNewItemWidth = itemWidth && itemWidth !== this.props.itemWidth;
+        const hasNewItemHeight = itemHeight && itemHeight !== this.props.itemHeight;
+
+        if (hasNewSliderWidth || hasNewSliderHeight || hasNewItemWidth || hasNewItemHeight) {
+            this._contentRecenterTimeout = setTimeout(() => {
+                this._snapToItem(this._activeItem, false, false, false, false);
+            }, this.props.contentRecenterDelay);
+        }
+    }
+
     componentWillUnmount () {
         this._mounted = false;
         this.stopAutoplay();
+        clearTimeout(this._contentRecenterTimeout);
         clearTimeout(this._apparitionTimeout);
         clearTimeout(this._hackSlideAnimationTimeout);
         clearTimeout(this._enableAutoplayTimeout);
